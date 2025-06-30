@@ -122,6 +122,37 @@
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
       }
 
+      .color-controls {
+        position: absolute;
+        bottom: 20px;
+        right: 70px;
+        display: flex;
+        gap: 5px;
+        z-index: 15;
+      }
+
+      .color-btn {
+        width: 20px;
+        height: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 3px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        transform: none !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      }
+
+      .color-btn:hover {
+        border-color: rgba(255, 255, 255, 0.6);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+        transform: none !important;
+      }
+
+      .color-btn.active {
+        border-color: white;
+        box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+      }
+
       .hud-hidden {
         display: none;
       }
@@ -149,6 +180,10 @@
     </div>
 
     <button id="hudToggle" class="hud-toggle">HUD</button>
+
+    <div id="colorControls" class="color-controls">
+      <!-- Color buttons will be generated dynamically -->
+    </div>
 
     <script>
       // Game variables
@@ -246,8 +281,48 @@
           colorTransitionProgress
         );
 
-        // Apply the gradient to the body
-        document.body.style.background = `linear-gradient(45deg, ${color1}, ${color2})`;
+        // Apply the gradient to the canvas
+        const canvas = document.getElementById("gameCanvas");
+        canvas.style.background = `linear-gradient(135deg, ${color1} 0%, ${color2} 100%)`;
+
+        // Update active color button
+        updateActiveColorButton();
+      }
+
+      // Create color control buttons
+      function createColorButtons() {
+        const colorControls = document.getElementById("colorControls");
+        colorControls.innerHTML = "";
+
+        colorThemes.forEach((theme, index) => {
+          const btn = document.createElement("div");
+          btn.className = "color-btn";
+          btn.style.background = `linear-gradient(45deg, ${theme.colors[0]}, ${theme.colors[1]})`;
+          btn.title = theme.name;
+          btn.onclick = () => jumpToColor(index);
+          colorControls.appendChild(btn);
+        });
+      }
+
+      // Jump to specific color in cycle
+      function jumpToColor(index) {
+        currentColorIndex = index;
+        nextColorIndex = (index + 1) % colorThemes.length;
+        colorTransitionProgress = 0;
+        backgroundTimer = 0; // Reset timer so we stay on this color for full duration
+        updateBackgroundGradient();
+      }
+
+      // Update active color button highlight
+      function updateActiveColorButton() {
+        const colorButtons = document.querySelectorAll(".color-btn");
+        colorButtons.forEach((btn, index) => {
+          if (index === currentColorIndex) {
+            btn.classList.add("active");
+          } else {
+            btn.classList.remove("active");
+          }
+        });
       }
 
       // Number formatting for idle game style
@@ -603,13 +678,16 @@
         hudVisible = !hudVisible;
         const ui = document.querySelector(".ui");
         const stats = document.querySelector(".stats");
+        const colorControls = document.getElementById("colorControls");
 
         if (hudVisible) {
           ui.classList.remove("hud-hidden");
           stats.classList.remove("hud-hidden");
+          colorControls.classList.remove("hud-hidden");
         } else {
           ui.classList.add("hud-hidden");
           stats.classList.add("hud-hidden");
+          colorControls.classList.add("hud-hidden");
         }
       }
 
@@ -736,7 +814,8 @@
         money = 100; // Start with some money
       }
 
-      // Initialize background gradient
+      // Initialize background gradient and color buttons
+      createColorButtons();
       updateBackgroundGradient();
 
       updateUI();
