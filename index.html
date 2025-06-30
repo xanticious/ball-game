@@ -177,6 +177,9 @@
       <div>Speed Multiplier: <span id="speedMultiplier">1.00x</span></div>
       <div>Ball Cost: <span id="ballCost">$100</span></div>
       <div>Speed Cost: <span id="speedCost">$10.0k</span></div>
+      <div>Total Earned: <span id="totalEarned">$0</span></div>
+      <div>Income: <span id="estimatedIncome">~ $0 / min</span></div>
+      <div>Buy Next ETA: <span id="buyNextETA">Now</span></div>
     </div>
 
     <button id="hudToggle" class="hud-toggle">HUD</button>
@@ -204,6 +207,12 @@
       let ballCount = 0;
       let autoSaveTimer = 0;
       let hudVisible = true;
+
+      // Income tracking
+      let totalEarned = 0;
+      let lastTotalEarned = 0;
+      let estimatedIncome = 0;
+      let incomeTimer = 0;
 
       // Background color cycling
       let backgroundTimer = 0;
@@ -342,6 +351,50 @@
         }
       }
 
+      // Format time duration for ETA display
+      function formatDuration(minutes) {
+        if (minutes <= 0) return "Now";
+
+        const days = Math.floor(minutes / (24 * 60));
+        const hours = Math.floor((minutes % (24 * 60)) / 60);
+        const mins = Math.ceil(minutes % 60);
+
+        let result = "~";
+
+        if (days > 0) {
+          result += `${days}d`;
+          if (hours > 0) result += ` ${hours}h`;
+          if (mins > 0 && days === 0) result += ` ${mins}m`;
+        } else if (hours > 0) {
+          result += `${hours}h`;
+          if (mins > 0) result += ` ${mins}m`;
+        } else {
+          result += `${mins}m`;
+        }
+
+        return result;
+      }
+
+      // Calculate time until next purchase
+      function calculateBuyNextETA() {
+        // Find the cheapest purchase option
+        const nextPurchaseCost = Math.min(ballCost, speedUpgradeCost);
+        const amountLacking = nextPurchaseCost - money;
+
+        if (amountLacking <= 0) {
+          return "Now";
+        }
+
+        // If no income yet, can't estimate
+        if (estimatedIncome <= 0) {
+          return "?";
+        }
+
+        // Calculate minutes needed
+        const estimatedMinutes = amountLacking / estimatedIncome;
+        return formatDuration(estimatedMinutes);
+      }
+
       // Save game state to localStorage
       function saveGameState() {
         const gameState = {
@@ -350,6 +403,9 @@
           ballCost: ballCost,
           speedUpgradeCost: speedUpgradeCost,
           speedMultiplier: speedMultiplier,
+          totalEarned: totalEarned,
+          lastTotalEarned: lastTotalEarned,
+          estimatedIncome: estimatedIncome,
           ballsData: balls.map((ball) => ({
             x: ball.x,
             y: ball.y,
@@ -375,6 +431,9 @@
             ballCost = gameState.ballCost || 100;
             speedUpgradeCost = gameState.speedUpgradeCost || 10000;
             speedMultiplier = gameState.speedMultiplier || 1.0;
+            totalEarned = gameState.totalEarned || 0;
+            lastTotalEarned = gameState.lastTotalEarned || 0;
+            estimatedIncome = gameState.estimatedIncome || 0;
 
             // Restore balls
             balls = [];
@@ -410,6 +469,10 @@
         autoSaveTimer = 0;
         backgroundTimer = 0;
         colorTransitionProgress = 0;
+        totalEarned = 100; // Starting money counts as earned
+        lastTotalEarned = 0;
+        estimatedIncome = 0;
+        incomeTimer = 0;
         localStorage.removeItem("ballGameSave");
         updateUI();
         console.log("Game reset!");
@@ -467,6 +530,7 @@
           if (this.moneyTimer >= 60) {
             // Every second at 60fps
             money += 1;
+            totalEarned += 1;
             this.moneyTimer = 0;
           }
         }
@@ -486,6 +550,7 @@
           if (distance < this.radius + obstacle.radius) {
             // Add money reward for hitting obstacle
             money += 10;
+            totalEarned += 10;
 
             // Normalize collision vector
             const nx = dx / distance;
@@ -713,6 +778,14 @@
         document.getElementById("speedCost").textContent = `$${formatNumber(
           speedUpgradeCost
         )}`;
+        document.getElementById("totalEarned").textContent = `$${formatNumber(
+          totalEarned
+        )}`;
+        document.getElementById(
+          "estimatedIncome"
+        ).textContent = `~ $${formatNumber(estimatedIncome)} / min`;
+        document.getElementById("buyNextETA").textContent =
+          calculateBuyNextETA();
 
         // Update button text
         document.getElementById(
@@ -784,6 +857,14 @@
         // Apply background gradient update
         updateBackgroundGradient();
 
+        // Update income tracking every minute (60 seconds * 60 fps = 3600 frames)
+        incomeTimer++;
+        if (incomeTimer >= 3600) {
+          estimatedIncome = totalEarned - lastTotalEarned;
+          lastTotalEarned = totalEarned;
+          incomeTimer = 0;
+        }
+
         // Update UI
         updateUI();
 
@@ -812,6 +893,7 @@
       if (!loadGameState()) {
         // If no save data, start with default values
         money = 100; // Start with some money
+        totalEarned = 100; // Starting money counts as earned
       }
 
       // Initialize background gradient and color buttons
