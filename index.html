@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bouncing Balls Economy Game</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Arial", sans-serif;
+        background: linear-gradient(45deg, #2c5aa0, #3d72c7);
+        overflow: hidden;
+        height: 100vh;
+      }
+
+      #gameCanvas {
+        display: block;
+        background: linear-gradient(135deg, #7b68ee 0%, #9370db 100%);
+        border: 2px solid #444;
+      }
+
+      .ui {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        color: white;
+        font-weight: bold;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        z-index: 10;
+      }
+
+      .money {
+        font-size: 24px;
+        margin-bottom: 20px;
+        background: rgba(0, 0, 0, 0.4);
+        padding: 10px 15px;
+        border-radius: 10px;
+        border: 2px solid #ffd700;
+        box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+      }
+
+      .buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      button {
+        background: linear-gradient(45deg, #ff4757, #ff3838);
+        color: white;
+        border: none;
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      button:disabled {
+        background: #666;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .upgrade-btn {
+        background: linear-gradient(45deg, #00d2ff, #3a7bd5);
+      }
+
+      .reset-btn {
+        background: linear-gradient(45deg, #ff6b35, #f7931e);
+      }
+
+      .stats {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        color: white;
+        font-weight: bold;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+        background: rgba(0, 0, 0, 0.4);
+        padding: 10px 15px;
+        border-radius: 10px;
+        font-size: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .hud-toggle {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.5);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        padding: 5px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: normal;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 15;
+      }
+
+      .hud-toggle:hover {
+        background: rgba(0, 0, 0, 0.7);
+        transform: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .hud-hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="ui">
+      <div class="money" id="moneyDisplay">$0</div>
+      <div class="buttons">
+        <button id="addBallBtn">+ Ball ($100)</button>
+        <button id="upgradeSpeedBtn" class="upgrade-btn">
+          Upgrade Speed ($10.0k)
+        </button>
+        <button id="resetBtn" class="reset-btn">Reset Game</button>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div>Balls: <span id="ballCount">0</span></div>
+      <div>Speed Multiplier: <span id="speedMultiplier">1.00x</span></div>
+      <div>Ball Cost: <span id="ballCost">$100</span></div>
+      <div>Speed Cost: <span id="speedCost">$10.0k</span></div>
+    </div>
+
+    <button id="hudToggle" class="hud-toggle">HUD</button>
+
+    <script>
+      // Game variables
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+
+      // Set canvas size
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      // Game state
+      let money = 0;
+      let balls = [];
+      let obstacles = [];
+      let ballCost = 100;
+      let speedUpgradeCost = 10000;
+      let speedMultiplier = 1.0;
+      let ballCount = 0;
+      let autoSaveTimer = 0;
+      let hudVisible = true;
+
+      // Number formatting for idle game style
+      function formatNumber(num) {
+        const suffixes = ["", "k", "M", "B", "T", "q", "Q", "s", "S", "O", "N"];
+        let suffixIndex = 0;
+
+        while (num >= 1000 && suffixIndex < suffixes.length - 1) {
+          num /= 1000;
+          suffixIndex++;
+        }
+
+        if (suffixIndex === 0) {
+          return Math.floor(num).toString();
+        } else {
+          return num.toFixed(3).replace(/\.?0+$/, "") + suffixes[suffixIndex];
+        }
+      }
+
+      // Save game state to localStorage
+      function saveGameState() {
+        const gameState = {
+          money: money,
+          ballCount: ballCount,
+          ballCost: ballCost,
+          speedUpgradeCost: speedUpgradeCost,
+          speedMultiplier: speedMultiplier,
+          ballsData: balls.map((ball) => ({
+            x: ball.x,
+            y: ball.y,
+            radius: ball.radius,
+            vx: ball.vx,
+            vy: ball.vy,
+            color: ball.color,
+          })),
+          timestamp: Date.now(),
+        };
+        localStorage.setItem("ballGameSave", JSON.stringify(gameState));
+        console.log("Game saved!");
+      }
+
+      // Load game state from localStorage
+      function loadGameState() {
+        const savedState = localStorage.getItem("ballGameSave");
+        if (savedState) {
+          try {
+            const gameState = JSON.parse(savedState);
+            money = gameState.money || 0;
+            ballCount = gameState.ballCount || 0;
+            ballCost = gameState.ballCost || 100;
+            speedUpgradeCost = gameState.speedUpgradeCost || 10000;
+            speedMultiplier = gameState.speedMultiplier || 1.0;
+
+            // Restore balls
+            balls = [];
+            if (gameState.ballsData) {
+              gameState.ballsData.forEach((ballData) => {
+                let ball = new Ball(ballData.x, ballData.y);
+                ball.radius = ballData.radius;
+                ball.vx = ballData.vx;
+                ball.vy = ballData.vy;
+                ball.color = ballData.color;
+                balls.push(ball);
+              });
+            }
+
+            console.log("Game loaded!");
+            return true;
+          } catch (error) {
+            console.error("Error loading game state:", error);
+            return false;
+          }
+        }
+        return false;
+      }
+
+      // Reset game state
+      function resetGameState() {
+        money = 100;
+        balls = [];
+        ballCount = 0;
+        ballCost = 100;
+        speedUpgradeCost = 10000;
+        speedMultiplier = 1.0;
+        autoSaveTimer = 0;
+        localStorage.removeItem("ballGameSave");
+        updateUI();
+        console.log("Game reset!");
+      }
+
+      // Ball class
+      class Ball {
+        constructor(x, y) {
+          this.x = x || Math.random() * (canvas.width - 40) + 20;
+          this.y = y || Math.random() * (canvas.height - 40) + 20;
+          this.radius = Math.random() * 15 + 10;
+          this.vx = (Math.random() - 0.5) * 8 * speedMultiplier;
+          this.vy = (Math.random() - 0.5) * 8 * speedMultiplier;
+          this.color = `hsl(${Math.random() * 360}, 85%, 65%)`;
+          this.trail = [];
+          this.moneyTimer = 0;
+        }
+
+        update() {
+          // Update position
+          this.x += this.vx * speedMultiplier;
+          this.y += this.vy * speedMultiplier;
+
+          // Bounce off walls
+          if (this.x <= this.radius || this.x >= canvas.width - this.radius) {
+            this.vx = -this.vx;
+            this.x = Math.max(
+              this.radius,
+              Math.min(canvas.width - this.radius, this.x)
+            );
+          }
+          if (this.y <= this.radius || this.y >= canvas.height - this.radius) {
+            this.vy = -this.vy;
+            this.y = Math.max(
+              this.radius,
+              Math.min(canvas.height - this.radius, this.y)
+            );
+          }
+
+          // Check collision with obstacles
+          obstacles.forEach((obstacle) => {
+            if (this.checkCollisionWithObstacle(obstacle)) {
+              this.bounceOffObstacle(obstacle);
+            }
+          });
+
+          // Add to trail
+          this.trail.push({ x: this.x, y: this.y });
+          if (this.trail.length > 10) {
+            this.trail.shift();
+          }
+
+          // Generate money over time
+          this.moneyTimer += 1;
+          if (this.moneyTimer >= 60) {
+            // Every second at 60fps
+            money += 1;
+            this.moneyTimer = 0;
+          }
+        }
+
+        checkCollisionWithObstacle(obstacle) {
+          const dx = this.x - obstacle.x;
+          const dy = this.y - obstacle.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          return distance < this.radius + obstacle.radius;
+        }
+
+        bounceOffObstacle(obstacle) {
+          const dx = this.x - obstacle.x;
+          const dy = this.y - obstacle.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < this.radius + obstacle.radius) {
+            // Add money reward for hitting obstacle
+            money += 10;
+
+            // Normalize collision vector
+            const nx = dx / distance;
+            const ny = dy / distance;
+
+            // Separate balls
+            const overlap = this.radius + obstacle.radius - distance;
+            this.x += nx * overlap * 0.5;
+            this.y += ny * overlap * 0.5;
+
+            // Reflect velocity
+            const dotProduct = this.vx * nx + this.vy * ny;
+            this.vx -= 2 * dotProduct * nx;
+            this.vy -= 2 * dotProduct * ny;
+          }
+        }
+
+        draw() {
+          // Draw trail
+          ctx.globalAlpha = 0.3;
+          for (let i = 0; i < this.trail.length; i++) {
+            const point = this.trail[i];
+            const alpha = i / this.trail.length;
+            ctx.globalAlpha = alpha * 0.3;
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, this.radius * alpha, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // Draw ball
+          ctx.globalAlpha = 1;
+          const gradient = ctx.createRadialGradient(
+            this.x - this.radius / 3,
+            this.y - this.radius / 3,
+            0,
+            this.x,
+            this.y,
+            this.radius
+          );
+          gradient.addColorStop(0, this.color);
+          gradient.addColorStop(1, this.color.replace("65%", "45%"));
+
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Add shine effect
+          ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+          ctx.beginPath();
+          ctx.arc(
+            this.x - this.radius / 3,
+            this.y - this.radius / 3,
+            this.radius / 3,
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
+        }
+      }
+
+      // Obstacle class
+      class Obstacle {
+        constructor(x, y, sides, radius) {
+          this.x = x;
+          this.y = y;
+          this.sides = sides;
+          this.radius = radius;
+          this.rotation = 0;
+          this.rotationSpeed = (Math.random() - 0.5) * 0.02;
+          this.color = `hsl(${Math.random() * 60 + 280}, 70%, 55%)`;
+        }
+
+        update() {
+          this.rotation += this.rotationSpeed;
+        }
+
+        draw() {
+          ctx.save();
+          ctx.translate(this.x, this.y);
+          ctx.rotate(this.rotation);
+
+          const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+          gradient.addColorStop(0, this.color);
+          gradient.addColorStop(1, this.color.replace("55%", "35%"));
+
+          ctx.fillStyle = gradient;
+          ctx.strokeStyle = this.color.replace("55%", "70%");
+          ctx.lineWidth = 3;
+
+          ctx.beginPath();
+          for (let i = 0; i < this.sides; i++) {
+            const angle = (i / this.sides) * Math.PI * 2;
+            const x = Math.cos(angle) * this.radius;
+            const y = Math.sin(angle) * this.radius;
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.restore();
+        }
+      }
+
+      // Create obstacles
+      function createObstacles() {
+        obstacles = [];
+        const numObstacles = 5;
+
+        for (let i = 0; i < numObstacles; i++) {
+          let x, y, radius;
+          let validPosition = false;
+          let attempts = 0;
+
+          while (!validPosition && attempts < 50) {
+            x = Math.random() * (canvas.width - 200) + 100;
+            y = Math.random() * (canvas.height - 200) + 100;
+            radius = Math.random() * 40 + 30;
+
+            validPosition = true;
+            // Check if too close to other obstacles
+            for (let obstacle of obstacles) {
+              const dx = x - obstacle.x;
+              const dy = y - obstacle.y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              if (distance < radius + obstacle.radius + 50) {
+                validPosition = false;
+                break;
+              }
+            }
+            attempts++;
+          }
+
+          if (validPosition) {
+            const sides = Math.floor(Math.random() * 5) + 5; // 5-9 sides
+            obstacles.push(new Obstacle(x, y, sides, radius));
+          }
+        }
+      }
+
+      // Add ball function
+      function addBall() {
+        if (money >= ballCost) {
+          money -= ballCost;
+          balls.push(new Ball());
+          ballCount++;
+          ballCost = Math.floor(ballCost * 1.5);
+          updateUI();
+          saveGameState(); // Save after adding ball
+        }
+      }
+
+      // Upgrade speed function
+      function upgradeSpeed() {
+        if (money >= speedUpgradeCost) {
+          money -= speedUpgradeCost;
+          speedMultiplier *= 1.02;
+          speedUpgradeCost = Math.floor(speedUpgradeCost * 1.5);
+
+          // Update existing balls' speed
+          balls.forEach((ball) => {
+            ball.vx *= 1.02;
+            ball.vy *= 1.02;
+          });
+
+          updateUI();
+          saveGameState(); // Save after upgrade
+        }
+      }
+
+      // Reset game function
+      function resetGame() {
+        if (
+          confirm(
+            "Are you sure you want to reset your game? This will delete all progress and cannot be undone!"
+          )
+        ) {
+          resetGameState();
+        }
+      }
+
+      // Toggle HUD visibility
+      function toggleHUD() {
+        hudVisible = !hudVisible;
+        const ui = document.querySelector(".ui");
+        const stats = document.querySelector(".stats");
+
+        if (hudVisible) {
+          ui.classList.remove("hud-hidden");
+          stats.classList.remove("hud-hidden");
+        } else {
+          ui.classList.add("hud-hidden");
+          stats.classList.add("hud-hidden");
+        }
+      }
+
+      // Update HUD toggle button text
+      function updateHUDToggle() {
+        const hudToggle = document.getElementById("hudToggle");
+        const canAffordAnything =
+          money >= ballCost || money >= speedUpgradeCost;
+        hudToggle.textContent = canAffordAnything ? "HUD*" : "HUD";
+      }
+
+      // Update UI elements
+      function updateUI() {
+        document.getElementById("moneyDisplay").textContent = `$${formatNumber(
+          money
+        )}`;
+        document.getElementById("ballCount").textContent = ballCount;
+        document.getElementById("speedMultiplier").textContent =
+          speedMultiplier.toFixed(2) + "x";
+        document.getElementById("ballCost").textContent = `$${formatNumber(
+          ballCost
+        )}`;
+        document.getElementById("speedCost").textContent = `$${formatNumber(
+          speedUpgradeCost
+        )}`;
+
+        // Update button text
+        document.getElementById(
+          "addBallBtn"
+        ).textContent = `+ Ball ($${formatNumber(ballCost)})`;
+        document.getElementById(
+          "upgradeSpeedBtn"
+        ).textContent = `Upgrade Speed ($${formatNumber(speedUpgradeCost)})`;
+
+        // Update button states
+        document.getElementById("addBallBtn").disabled = money < ballCost;
+        document.getElementById("upgradeSpeedBtn").disabled =
+          money < speedUpgradeCost;
+
+        // Update HUD toggle button
+        updateHUDToggle();
+      }
+
+      // Game loop
+      function animate() {
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Update and draw obstacles
+        obstacles.forEach((obstacle) => {
+          obstacle.update();
+          obstacle.draw();
+        });
+
+        // Update and draw balls
+        balls.forEach((ball) => {
+          ball.update();
+          ball.draw();
+        });
+
+        // Auto-save every 5 minutes (300 seconds * 60 fps = 18000 frames)
+        autoSaveTimer++;
+        if (autoSaveTimer >= 18000) {
+          saveGameState();
+          autoSaveTimer = 0;
+        }
+
+        // Update UI
+        updateUI();
+
+        requestAnimationFrame(animate);
+      }
+
+      // Event listeners
+      document.getElementById("addBallBtn").addEventListener("click", addBall);
+      document
+        .getElementById("upgradeSpeedBtn")
+        .addEventListener("click", upgradeSpeed);
+      document.getElementById("resetBtn").addEventListener("click", resetGame);
+      document.getElementById("hudToggle").addEventListener("click", toggleHUD);
+
+      // Handle window resize
+      window.addEventListener("resize", () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        createObstacles();
+      });
+
+      // Initialize game
+      createObstacles();
+
+      // Try to load saved game state
+      if (!loadGameState()) {
+        // If no save data, start with default values
+        money = 100; // Start with some money
+      }
+
+      updateUI();
+      animate();
+
+      // Add some initial balls for demonstration (only if no balls loaded)
+      setTimeout(() => {
+        if (balls.length === 0) {
+          addBall();
+        }
+      }, 1000);
+    </script>
+  </body>
+</html>
