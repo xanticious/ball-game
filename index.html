@@ -170,6 +170,86 @@
       let autoSaveTimer = 0;
       let hudVisible = true;
 
+      // Background color cycling
+      let backgroundTimer = 0;
+      let currentColorIndex = 0;
+      let nextColorIndex = 1;
+      let colorTransitionProgress = 0;
+
+      // Color themes for background cycling (30 minutes total, ~2.5 min per color)
+      const colorThemes = [
+        { name: "purple", colors: ["#6a4c93", "#9d5ec9"] },
+        { name: "pink", colors: ["#e91e63", "#f48fb1"] },
+        { name: "red", colors: ["#d32f2f", "#f44336"] },
+        { name: "orange", colors: ["#ff5722", "#ff9800"] },
+        { name: "yellow", colors: ["#ffa000", "#ffca28"] },
+        { name: "green", colors: ["#388e3c", "#66bb6a"] },
+        { name: "blue", colors: ["#1976d2", "#42a5f5"] },
+        { name: "teal", colors: ["#00695c", "#26a69a"] },
+        { name: "indigo", colors: ["#303f9f", "#5c6bc0"] },
+        { name: "brown", colors: ["#5d4037", "#8d6e63"] },
+        { name: "gray", colors: ["#424242", "#757575"] },
+        { name: "gold", colors: ["#b8860b", "#daa520"] },
+      ];
+
+      // Shuffle the color themes array
+      function shuffleColorThemes() {
+        for (let i = colorThemes.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [colorThemes[i], colorThemes[j]] = [colorThemes[j], colorThemes[i]];
+        }
+      }
+
+      // Initialize with shuffled themes
+      shuffleColorThemes();
+
+      // Function to interpolate between two hex colors
+      function interpolateColor(color1, color2, factor) {
+        // Remove # if present
+        color1 = color1.replace("#", "");
+        color2 = color2.replace("#", "");
+
+        // Parse hex colors
+        const r1 = parseInt(color1.substr(0, 2), 16);
+        const g1 = parseInt(color1.substr(2, 2), 16);
+        const b1 = parseInt(color1.substr(4, 2), 16);
+
+        const r2 = parseInt(color2.substr(0, 2), 16);
+        const g2 = parseInt(color2.substr(2, 2), 16);
+        const b2 = parseInt(color2.substr(4, 2), 16);
+
+        // Interpolate
+        const r = Math.round(r1 + (r2 - r1) * factor);
+        const g = Math.round(g1 + (g2 - g1) * factor);
+        const b = Math.round(b1 + (b2 - b1) * factor);
+
+        // Convert back to hex
+        return `#${r.toString(16).padStart(2, "0")}${g
+          .toString(16)
+          .padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+      }
+
+      // Update background gradient
+      function updateBackgroundGradient() {
+        const currentTheme = colorThemes[currentColorIndex];
+        const nextTheme = colorThemes[nextColorIndex];
+
+        // Interpolate between current and next theme colors
+        const color1 = interpolateColor(
+          currentTheme.colors[0],
+          nextTheme.colors[0],
+          colorTransitionProgress
+        );
+        const color2 = interpolateColor(
+          currentTheme.colors[1],
+          nextTheme.colors[1],
+          colorTransitionProgress
+        );
+
+        // Apply the gradient to the body
+        document.body.style.background = `linear-gradient(45deg, ${color1}, ${color2})`;
+      }
+
       // Number formatting for idle game style
       function formatNumber(num) {
         const suffixes = ["", "k", "M", "B", "T", "q", "Q", "s", "S", "O", "N"];
@@ -253,6 +333,8 @@
         speedUpgradeCost = 10000;
         speedMultiplier = 1.0;
         autoSaveTimer = 0;
+        backgroundTimer = 0;
+        colorTransitionProgress = 0;
         localStorage.removeItem("ballGameSave");
         updateUI();
         console.log("Game reset!");
@@ -595,6 +677,35 @@
           autoSaveTimer = 0;
         }
 
+        // Update background color cycling (30 minutes total = 1800 seconds = 108000 frames)
+        // Each color lasts ~2.5 minutes = 150 seconds = 9000 frames
+        backgroundTimer++;
+        const colorDuration = 9000; // frames per color
+
+        if (backgroundTimer >= colorDuration) {
+          // Move to next color
+          backgroundTimer = 0;
+          currentColorIndex = nextColorIndex;
+          nextColorIndex = (nextColorIndex + 1) % colorThemes.length;
+          colorTransitionProgress = 0;
+
+          // If we've completed a full cycle, shuffle the themes again
+          if (currentColorIndex === 0) {
+            shuffleColorThemes();
+          }
+        } else {
+          // Update transition progress (smooth transition over 30 seconds = 1800 frames)
+          const transitionDuration = 1800;
+          if (backgroundTimer <= transitionDuration) {
+            colorTransitionProgress = backgroundTimer / transitionDuration;
+          } else {
+            colorTransitionProgress = 1;
+          }
+        }
+
+        // Apply background gradient update
+        updateBackgroundGradient();
+
         // Update UI
         updateUI();
 
@@ -624,6 +735,9 @@
         // If no save data, start with default values
         money = 100; // Start with some money
       }
+
+      // Initialize background gradient
+      updateBackgroundGradient();
 
       updateUI();
       animate();
