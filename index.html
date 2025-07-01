@@ -538,6 +538,15 @@
           this.x += this.vx * speedMultiplier;
           this.y += this.vy * speedMultiplier;
 
+          // Prevent balls from getting stuck with near-zero velocities
+          const minVelocity = 0.5;
+          if (Math.abs(this.vx) < minVelocity) {
+            this.vx = this.vx >= 0 ? minVelocity : -minVelocity;
+          }
+          if (Math.abs(this.vy) < minVelocity) {
+            this.vy = this.vy >= 0 ? minVelocity : -minVelocity;
+          }
+
           // Bounce off walls
           if (this.x <= this.radius || this.x >= canvas.width - this.radius) {
             this.vx = -this.vx;
