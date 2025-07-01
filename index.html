@@ -165,7 +165,10 @@
       <div class="money" id="moneyDisplay">$0</div>
       <div class="buttons">
         <button id="addBallBtn">+ Ball ($100)</button>
-        <button id="addBumperBtn" class="upgrade-btn">+ Bumper ($1.0k)</button>
+        <button id="addBumperBtn" class="upgrade-btn">+ Bumper ($130)</button>
+        <button id="sizeUpgradeBtn" class="upgrade-btn">
+          + Ball Size ($3.0k)
+        </button>
         <button id="upgradeSpeedBtn" class="upgrade-btn">
           Upgrade Speed ($10.0k)
         </button>
@@ -177,9 +180,11 @@
       <div>Balls: <span id="ballCount">0</span></div>
       <div>Bumpers: <span id="bumperCount">0</span></div>
       <div>Speed Multiplier: <span id="speedMultiplier">1.00x</span></div>
+      <div>Size Multiplier: <span id="sizeMultiplier">1.00x</span></div>
       <div>Ball Cost: <span id="ballCost">$100</span></div>
       <div>Speed Cost: <span id="speedCost">$10.0k</span></div>
-      <div>Bumper Cost: <span id="bumperCostDisplay">$1.0k</span></div>
+      <div>Size Cost: <span id="sizeCost">$3.0k</span></div>
+      <div>Bumper Cost: <span id="bumperCostDisplay">$130</span></div>
       <div>Total Earned: <span id="totalEarned">$0</span></div>
       <div>Income: <span id="estimatedIncome">~ $0 / min</span></div>
       <div>Buy Next ETA: <span id="buyNextETA">Now</span></div>
@@ -206,8 +211,10 @@
       let obstacles = [];
       let ballCost = 100;
       let speedUpgradeCost = 10000;
-      let bumperCost = 1000;
+      let sizeUpgradeCost = 3000;
+      let bumperCost = 130;
       let speedMultiplier = 1.0;
+      let sizeMultiplier = 1.0;
       let ballCount = 0;
       let bumperCount = 0;
       let autoSaveTimer = 0;
@@ -215,9 +222,9 @@
 
       // Income tracking
       let totalEarned = 0;
-      let lastTotalEarned = 0;
       let estimatedIncome = 0;
       let incomeTimer = 0;
+      const incomeBuffer = [];
 
       // Background color cycling
       let backgroundTimer = 0;
@@ -386,6 +393,7 @@
         const nextPurchaseCost = Math.min(
           ballCost,
           speedUpgradeCost,
+          sizeUpgradeCost,
           bumperCost
         );
         const amountLacking = nextPurchaseCost - money;
@@ -411,12 +419,14 @@
           ballCount: ballCount,
           ballCost: ballCost,
           speedUpgradeCost: speedUpgradeCost,
+          sizeUpgradeCost: sizeUpgradeCost,
           bumperCost: bumperCost,
           bumperCount: bumperCount,
           speedMultiplier: speedMultiplier,
+          sizeMultiplier: sizeMultiplier,
           totalEarned: totalEarned,
-          lastTotalEarned: lastTotalEarned,
           estimatedIncome: estimatedIncome,
+          incomeBuffer: incomeBuffer,
           ballsData: balls.map((ball) => ({
             x: ball.x,
             y: ball.y,
@@ -448,12 +458,22 @@
             ballCount = gameState.ballCount || 0;
             ballCost = gameState.ballCost || 100;
             speedUpgradeCost = gameState.speedUpgradeCost || 10000;
-            bumperCost = gameState.bumperCost || 1000;
+            sizeUpgradeCost = gameState.sizeUpgradeCost || 3000;
+            bumperCost = gameState.bumperCost || 130;
             bumperCount = gameState.bumperCount || 0;
             speedMultiplier = gameState.speedMultiplier || 1.0;
+            sizeMultiplier = gameState.sizeMultiplier || 1.0;
             totalEarned = gameState.totalEarned || 0;
-            lastTotalEarned = gameState.lastTotalEarned || 0;
             estimatedIncome = gameState.estimatedIncome || 0;
+
+            // Restore income buffer if it exists
+            if (
+              gameState.incomeBuffer &&
+              Array.isArray(gameState.incomeBuffer)
+            ) {
+              incomeBuffer.length = 0; // Clear current buffer
+              incomeBuffer.push(...gameState.incomeBuffer);
+            }
 
             // Restore balls
             balls = [];
@@ -483,8 +503,8 @@
                 obstacles.push(obstacle);
               });
             } else {
-              // If no saved obstacles, create default ones
-              createObstacles();
+              // If no saved obstacles, start with empty obstacles array
+              obstacles = [];
             }
 
             console.log("Game loaded!");
@@ -504,18 +524,20 @@
         ballCount = 0;
         ballCost = 100;
         speedUpgradeCost = 10000;
-        bumperCost = 1000;
+        sizeUpgradeCost = 3000;
+        bumperCost = 130;
         bumperCount = 0;
         speedMultiplier = 1.0;
+        sizeMultiplier = 1.0;
         autoSaveTimer = 0;
         backgroundTimer = 0;
         colorTransitionProgress = 0;
         totalEarned = 100; // Starting money counts as earned
-        lastTotalEarned = 0;
         estimatedIncome = 0;
         incomeTimer = 0;
+        incomeBuffer.length = 0; // Clear the buffer
         localStorage.removeItem("ballGameSave");
-        createObstacles(); // Recreate default obstacles
+        obstacles = []; // Start with no obstacles
         updateUI();
         console.log("Game reset!");
       }
@@ -526,6 +548,7 @@
           this.x = x || Math.random() * (canvas.width - 40) + 20;
           this.y = y || Math.random() * (canvas.height - 40) + 20;
           this.radius = Math.random() * 15 + 10;
+          this.radius *= sizeMultiplier; // Apply size multiplier
           this.vx = (Math.random() - 0.5) * 8 * speedMultiplier;
           this.vy = (Math.random() - 0.5) * 8 * speedMultiplier;
           this.color = `hsl(${Math.random() * 360}, 85%, 65%)`;
@@ -554,6 +577,9 @@
               this.radius,
               Math.min(canvas.width - this.radius, this.x)
             );
+            // Add money reward for hitting wall
+            money += 1;
+            totalEarned += 1;
           }
           if (this.y <= this.radius || this.y >= canvas.height - this.radius) {
             this.vy = -this.vy;
@@ -561,6 +587,9 @@
               this.radius,
               Math.min(canvas.height - this.radius, this.y)
             );
+            // Add money reward for hitting wall
+            money += 1;
+            totalEarned += 1;
           }
 
           // Check collision with obstacles
@@ -715,7 +744,7 @@
       // Create obstacles
       function createObstacles() {
         obstacles = [];
-        const numObstacles = 5;
+        const numObstacles = bumperCount; // Use actual bumper count instead of fixed 5
 
         for (let i = 0; i < numObstacles; i++) {
           let x, y, radius;
@@ -771,6 +800,23 @@
           balls.forEach((ball) => {
             ball.vx *= 1.1;
             ball.vy *= 1.1;
+          });
+
+          updateUI();
+          saveGameState(); // Save after upgrade
+        }
+      }
+
+      // Upgrade size function
+      function upgradeSize() {
+        if (money >= sizeUpgradeCost) {
+          money -= sizeUpgradeCost;
+          sizeMultiplier *= 1.1;
+          sizeUpgradeCost = Math.floor(sizeUpgradeCost * 1.5);
+
+          // Update existing balls' size
+          balls.forEach((ball) => {
+            ball.radius *= 1.1;
           });
 
           updateUI();
@@ -852,7 +898,10 @@
       function updateHUDToggle() {
         const hudToggle = document.getElementById("hudToggle");
         const canAffordAnything =
-          money >= ballCost || money >= speedUpgradeCost || money >= bumperCost;
+          money >= ballCost ||
+          money >= speedUpgradeCost ||
+          money >= sizeUpgradeCost ||
+          money >= bumperCost;
         hudToggle.textContent = canAffordAnything ? "HUD*" : "HUD";
       }
 
@@ -865,11 +914,16 @@
         document.getElementById("bumperCount").textContent = bumperCount;
         document.getElementById("speedMultiplier").textContent =
           speedMultiplier.toFixed(2) + "x";
+        document.getElementById("sizeMultiplier").textContent =
+          sizeMultiplier.toFixed(2) + "x";
         document.getElementById("ballCost").textContent = `$${formatNumber(
           ballCost
         )}`;
         document.getElementById("speedCost").textContent = `$${formatNumber(
           speedUpgradeCost
+        )}`;
+        document.getElementById("sizeCost").textContent = `$${formatNumber(
+          sizeUpgradeCost
         )}`;
         document.getElementById(
           "bumperCostDisplay"
@@ -891,6 +945,9 @@
           "upgradeSpeedBtn"
         ).textContent = `Upgrade Speed ($${formatNumber(speedUpgradeCost)})`;
         document.getElementById(
+          "sizeUpgradeBtn"
+        ).textContent = `+ Ball Size ($${formatNumber(sizeUpgradeCost)})`;
+        document.getElementById(
           "addBumperBtn"
         ).textContent = `+ Bumper ($${formatNumber(bumperCost)})`;
 
@@ -898,6 +955,8 @@
         document.getElementById("addBallBtn").disabled = money < ballCost;
         document.getElementById("upgradeSpeedBtn").disabled =
           money < speedUpgradeCost;
+        document.getElementById("sizeUpgradeBtn").disabled =
+          money < sizeUpgradeCost;
         document.getElementById("addBumperBtn").disabled = money < bumperCost;
 
         // Update HUD toggle button
@@ -957,11 +1016,21 @@
         // Apply background gradient update
         updateBackgroundGradient();
 
-        // Update income tracking every minute (60 seconds * 60 fps = 3600 frames)
+        // Update income tracking every second (60 fps = 60 frames)
         incomeTimer++;
-        if (incomeTimer >= 3600) {
-          estimatedIncome = totalEarned - lastTotalEarned;
-          lastTotalEarned = totalEarned;
+        if (incomeTimer >= 60) {
+          const currentTotal = totalEarned;
+
+          if (incomeBuffer.length > 59) {
+            const minuteAgoTotal = incomeBuffer.shift();
+            estimatedIncome = currentTotal - minuteAgoTotal;
+            incomeBuffer.push(currentTotal);
+          } else {
+            // During first minute, show 0 income
+            estimatedIncome = 0;
+            incomeBuffer.push(currentTotal);
+          }
+
           incomeTimer = 0;
         }
 
@@ -976,6 +1045,9 @@
       document
         .getElementById("upgradeSpeedBtn")
         .addEventListener("click", upgradeSpeed);
+      document
+        .getElementById("sizeUpgradeBtn")
+        .addEventListener("click", upgradeSize);
       document
         .getElementById("addBumperBtn")
         .addEventListener("click", addBumper);
@@ -994,7 +1066,7 @@
         // If no save data, start with default values
         money = 100; // Start with some money
         totalEarned = 100; // Starting money counts as earned
-        createObstacles(); // Create initial obstacles
+        obstacles = []; // Start with no obstacles
       }
 
       // Initialize background gradient and color buttons
